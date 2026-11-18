@@ -1,3 +1,9 @@
+## Live Demo
+
+🚀 [Try the Telco Customer Churn Prediction App](https://telco-customer-churn-mmehdi2.streamlit.app/)
+
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://telco-customer-churn-mmehdi2.streamlit.app/)
+
 # Telco Customer Churn Prediction
 
 An end-to-end Machine Learning project that predicts customer churn using the IBM Telco Customer Churn dataset. The project combines exploratory data analysis, feature engineering, model evaluation, and an interactive Streamlit application.
