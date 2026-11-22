@@ -6,6 +6,13 @@ from predict import predict_churn
 from translations import TRANSLATIONS
 
 
+@st.cache_resource
+def get_shap_resources():
+    """Load SHAP resources once per Streamlit session."""
+    from explain import load_explainer_resources
+    return load_explainer_resources()
+
+
 # =========================================================
 # 1. PAGE CONFIGURATION
 # =========================================================
@@ -719,6 +726,56 @@ if page == t["prediction_page"]:
 
         st.caption(t["risk_note"])
         st.info(t["disclaimer"])
+
+        # -----------------------------------------------------
+        # Individual prediction explanation (SHAP)
+        # -----------------------------------------------------
+        with st.expander(
+            "🔍 Why did the model make this prediction?"
+            if language == "English"
+            else "🔍 Pourquoi le modèle a-t-il fait cette prédiction ?"
+        ):
+            try:
+                import matplotlib.pyplot as plt
+                import shap
+                from explain import explain_customer
+
+                shap_resources = get_shap_resources()
+                customer_for_explanation = st.session_state.get(
+                    "last_customer", {}
+                )
+                shap_result = explain_customer(
+                    customer_for_explanation, shap_resources
+                )
+
+                if shap_result.get("additivity_verified", False):
+                    explanation = shap_result["explanation"]
+                    st.caption(
+                        "Pink features increase the model's churn score; blue features decrease it. "
+                        "These are model contributions, not causal effects."
+                        if language == "English"
+                        else "Les facteurs en rose augmentent le score de désabonnement du modèle ; "
+                             "les facteurs en bleu le diminuent. Il s'agit de contributions du modèle, "
+                             "pas de relations causales."
+                    )
+                    shap.plots.waterfall(
+                        explanation, max_display=19, show=False
+                    )
+                    fig = plt.gcf()
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+                else:
+                    st.warning(
+                        "The explanation could not be verified against the model output."
+                        if language == "English"
+                        else "L'explication n'a pas pu être vérifiée par rapport à la sortie du modèle."
+                    )
+            except Exception as error:
+                st.error(
+                    f"Unable to generate SHAP explanation: {error}"
+                    if language == "English"
+                    else f"Impossible de générer l'explication SHAP : {error}"
+                )
 
         # Dataset-level patterns: intentionally not presented as individual explanations.
         customer = st.session_state.get("last_customer", {})
