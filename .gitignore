@@ -25,3 +25,15 @@ Thumbs.db
 # Editors
 .vscode/
 .idea/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.log
+*.tmp
+
+# Streamlit cache
+.streamlit/cache/

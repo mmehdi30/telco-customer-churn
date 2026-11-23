@@ -3,6 +3,9 @@ import streamlit as st
 import pandas as pd
 
 from predict import predict_churn
+from retention import get_retention_recommendations
+from portfolio import predict_portfolio, portfolio_metrics
+from campaign_simulator import simulate_campaign
 from translations import TRANSLATIONS
 
 
@@ -344,6 +347,8 @@ with st.sidebar:
         t["select_page"],
         [
             t["prediction_page"],
+            ("Portfolio Analysis" if language == "English" else "Analyse du portefeuille"),
+            ("Campaign Simulator" if language == "English" else "Simulateur de campagne"),
             t["performance"],
             t["about"]
         ]
@@ -728,6 +733,8 @@ if page == t["prediction_page"]:
         st.info(t["disclaimer"])
 
         # -----------------------------------------------------
+        shap_feature_contributions = {}
+
         # Individual prediction explanation (SHAP)
         # -----------------------------------------------------
         with st.expander(
@@ -750,6 +757,16 @@ if page == t["prediction_page"]:
 
                 if shap_result.get("additivity_verified", False):
                     explanation = shap_result["explanation"]
+                    # Save grouped SHAP values for retention recommendation ranking.
+                    try:
+                        feature_names = list(explanation.feature_names)
+                        feature_values = list(explanation.values)
+                        shap_feature_contributions = {
+                            str(name): float(value)
+                            for name, value in zip(feature_names, feature_values)
+                        }
+                    except Exception:
+                        shap_feature_contributions = {}
                     st.caption(
                         "Pink features increase the model's churn score; blue features decrease it. "
                         "These are model contributions, not causal effects."
@@ -776,6 +793,43 @@ if page == t["prediction_page"]:
                     if language == "English"
                     else f"Impossible de générer l'explication SHAP : {error}"
                 )
+
+        customer = st.session_state.get("last_customer", {})
+
+        # -----------------------------------------------------
+        # Retention recommendations
+        # -----------------------------------------------------
+        st.subheader(
+            "🎯 Retention recommendations"
+            if language == "English"
+            else "🎯 Recommandations de fidélisation"
+        )
+        retention_result = get_retention_recommendations(
+            customer, probability, shap_feature_contributions
+        )
+
+        st.markdown(
+            f"**{ 'Risk level' if language == 'English' else 'Niveau de risque' }: "
+            f"{retention_result['risk_level']} | "
+            f"{ 'Priority' if language == 'English' else 'Priorité' }: "
+            f"{retention_result['priority']}"
+        )
+        st.caption(
+            "These are rule-based suggestions, not guaranteed churn-prevention actions."
+            if language == "English"
+            else "Ces suggestions sont basées sur des règles et ne garantissent pas la prévention du désabonnement."
+        )
+
+        for rec in retention_result["recommendations"]:
+            with st.container(border=True):
+                st.markdown(f"**{rec['title']}** · {rec['priority']}")
+                if rec.get("shap_score") is not None:
+                    st.caption(
+                        f"SHAP prioritization score: {rec['shap_score']:.3f} "
+                        "(positive model contribution; heuristic, not intervention effectiveness)"
+                    )
+                st.markdown(rec["reason"])
+                st.markdown(f"**{ 'Suggested action' if language == 'English' else 'Action suggérée' }:** {rec['action']}")
 
         # Dataset-level patterns: intentionally not presented as individual explanations.
         customer = st.session_state.get("last_customer", {})
@@ -816,6 +870,122 @@ if page == t["prediction_page"]:
 
 # 7. MODEL PERFORMANCE PAGE
 # =========================================================
+
+elif page == ("Portfolio Analysis" if language == "English" else "Analyse du portefeuille"):
+    is_en = language == "English"
+    st.title("📊 " + ("Customer Portfolio Analysis" if is_en else "Analyse du portefeuille clients"))
+    st.caption("Upload a customer CSV for bulk scoring. The Churn column is optional; predictions work without historical labels." if is_en else "Importez un fichier CSV clients pour une analyse en lot. La colonne Churn est facultative ; les prédictions fonctionnent sans historique de désabonnement.")
+
+    uploaded = st.file_uploader("Upload CSV" if is_en else "Importer un fichier CSV", type=["csv"])
+    with st.expander("Required columns / Colonnes requises"):
+        st.write("Upload current customer records. Do not include Churn unless you are using historical data for testing.")
+        st.code("gender, SeniorCitizen, Partner, Dependents, tenure, PhoneService, MultipleLines, InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies, Contract, PaperlessBilling, PaymentMethod, MonthlyCharges", language="text")
+        st.caption("Extra columns such as customerID or TotalCharges are allowed and retained in the export.")
+    if uploaded is not None:
+        try:
+            raw_df = pd.read_csv(uploaded)
+            with st.spinner("Scoring customers..." if is_en else "Analyse des clients en cours..."):
+                portfolio_df = predict_portfolio(raw_df)
+            st.session_state["portfolio_predictions"] = portfolio_df
+            metrics = portfolio_metrics(portfolio_df)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total customers" if is_en else "Total clients", f"{metrics['total_customers']:,}")
+            c2.metric("High-risk customers" if is_en else "Clients à risque élevé", f"{metrics['high_risk_customers']:,}")
+            c3.metric("Average churn probability" if is_en else "Probabilité moyenne de churn", f"{metrics['average_churn_probability']:.1%}")
+            c4.metric("Expected monthly revenue at risk" if is_en else "Revenu mensuel attendu à risque", f"${metrics['monthly_revenue_at_risk']:,.2f}")
+            st.caption("Revenue at risk is estimated as monthly charges × churn probability; it is an expected-value estimate, not guaranteed loss." if is_en else "Le revenu à risque est estimé par frais mensuels × probabilité de churn ; il s'agit d'une estimation, pas d'une perte certaine.")
+
+            st.subheader("Risk distribution" if is_en else "Répartition des risques")
+            risk_counts = portfolio_df["risk_level"].value_counts().reindex(["Low", "Medium", "High"], fill_value=0)
+            st.bar_chart(risk_counts)
+
+            st.subheader("Customer ranking" if is_en else "Classement des clients")
+            risk_options = ["All", "Low", "Medium", "High"] if is_en else ["Tous", "Faible", "Moyen", "Élevé"]
+            risk_choice = st.selectbox("Risk level" if is_en else "Niveau de risque", risk_options)
+            selected_risk = {risk_options[0]: "All", risk_options[1]: "Low", risk_options[2]: "Medium", risk_options[3]: "High"}[risk_choice]
+            contracts = ["All"] + sorted(portfolio_df["Contract"].dropna().unique().tolist())
+            contract_choice = st.selectbox("Contract type" if is_en else "Type de contrat", contracts)
+            filtered = portfolio_df.copy()
+            if selected_risk != "All":
+                filtered = filtered[filtered["risk_level"] == selected_risk]
+            if contract_choice != "All":
+                filtered = filtered[filtered["Contract"] == contract_choice]
+
+            display_cols = [c for c in ["customerID", "Contract", "tenure", "MonthlyCharges", "churn_probability", "risk_level", "expected_monthly_revenue_at_risk"] if c in filtered.columns]
+            display = filtered[display_cols].copy()
+            if "churn_probability" in display.columns:
+                display["churn_probability"] = display["churn_probability"].map(lambda x: f"{x:.1%}")
+            if "expected_monthly_revenue_at_risk" in display.columns:
+                display["expected_monthly_revenue_at_risk"] = display["expected_monthly_revenue_at_risk"].map(lambda x: f"${x:,.2f}")
+            st.dataframe(display, use_container_width=True, hide_index=True)
+            csv_bytes = filtered.to_csv(index=False).encode("utf-8-sig")
+            st.download_button("Download predictions CSV" if is_en else "Télécharger les prédictions CSV", data=csv_bytes, file_name="churn_portfolio_predictions.csv", mime="text/csv")
+        except Exception as error:
+            st.error(("Portfolio analysis failed: " if is_en else "Échec de l'analyse : ") + str(error))
+
+elif page == ("Campaign Simulator" if language == "English" else "Simulateur de campagne"):
+    is_en = language == "English"
+    st.title("🎯 " + ("Retention Campaign Simulator" if is_en else "Simulateur de campagne de rétention"))
+    st.caption("Simulate campaign costs and hypothetical financial outcomes using churn probabilities. Results are assumptions, not measured campaign performance." if is_en else "Simulez les coûts et les résultats financiers hypothétiques à partir des probabilités de churn. Les résultats sont des hypothèses, pas des performances mesurées.")
+
+    scored_df = st.session_state.get("portfolio_predictions")
+    if scored_df is None:
+        uploaded_scored = st.file_uploader("Upload scored portfolio CSV" if is_en else "Importer le CSV de prédictions", type=["csv"], key="campaign_scored_upload")
+        if uploaded_scored is not None:
+            try:
+                scored_df = pd.read_csv(uploaded_scored)
+            except Exception as err:
+                st.error(str(err))
+                scored_df = None
+
+    if scored_df is not None:
+        required_campaign_cols = {"churn_probability", "MonthlyCharges"}
+        if not required_campaign_cols.issubset(scored_df.columns):
+            st.error("This file must contain churn_probability and MonthlyCharges. Upload the CSV exported from Portfolio Analysis." if is_en else "Le fichier doit contenir churn_probability et MonthlyCharges. Importez le CSV exporté depuis Analyse du portefeuille.")
+        else:
+            st.subheader("Campaign targeting" if is_en else "Ciblage de la campagne")
+            targeting = st.selectbox("Targeting method" if is_en else "Méthode de ciblage", ["High-risk customers", "Medium + High risk", "Top N customers", "All customers"] if is_en else ["Clients à risque élevé", "Risque moyen + élevé", "Top N clients", "Tous les clients"])
+            if is_en:
+                target_mode = targeting
+            else:
+                target_mode = {"Clients à risque élevé":"High-risk customers", "Risque moyen + élevé":"Medium + High risk", "Top N clients":"Top N customers", "Tous les clients":"All customers"}[targeting]
+            if target_mode == "Top N customers":
+                top_n = st.slider("Number of customers to target", min_value=1, max_value=max(1, len(scored_df)), value=min(100, max(1, len(scored_df))))
+                target_df = scored_df.sort_values("churn_probability", ascending=False).head(top_n).copy()
+            elif target_mode == "High-risk customers":
+                target_df = scored_df[scored_df.get("risk_level", pd.Series(index=scored_df.index, dtype=str)) == "High"].copy()
+            elif target_mode == "Medium + High risk":
+                target_df = scored_df[scored_df.get("risk_level", pd.Series(index=scored_df.index, dtype=str)).isin(["Medium", "High"])].copy()
+            else:
+                target_df = scored_df.copy()
+
+            c1, c2 = st.columns(2)
+            cost_per_customer = c1.number_input("Campaign cost per customer ($)", min_value=0.0, value=10.0, step=1.0)
+            success_rate_pct = c2.slider("Assumed campaign effectiveness (%)", min_value=0, max_value=100, value=20, step=5)
+            months_saved = st.select_slider("Revenue horizon (months)", options=[1, 3, 6, 12], value=3)
+            offer_type = st.selectbox("Campaign type", ["Discount / incentive", "Contract upgrade offer", "Service bundle", "Personalized outreach"] if is_en else ["Remise / avantage", "Offre de contrat", "Pack de services", "Contact personnalisé"])
+            st.caption("Campaign type is a label for this scenario; the model does not estimate offer-specific effectiveness." if is_en else "Le type de campagne est descriptif ; le modèle ne mesure pas l'efficacité propre à chaque offre.")
+
+            if target_df.empty:
+                st.warning("No customers match the selected targeting method." if is_en else "Aucun client ne correspond au ciblage choisi.")
+            else:
+                results = simulate_campaign(target_df, cost_per_customer, success_rate_pct / 100, int(months_saved))
+                st.subheader("Campaign scenario" if is_en else "Scénario de campagne")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Customers targeted" if is_en else "Clients ciblés", f"{results['customers_targeted']:,}")
+                m2.metric("Campaign cost" if is_en else "Coût de campagne", f"${results['campaign_cost']:,.2f}")
+                m3.metric("Estimated revenue saved" if is_en else "Revenu estimé préservé", f"${results['estimated_revenue_saved']:,.2f}")
+                m4.metric("Estimated net benefit" if is_en else "Bénéfice net estimé", f"${results['net_benefit']:,.2f}")
+                st.metric("Estimated campaign ROI" if is_en else "ROI estimé", "N/A" if results["roi_percent"] is None else f"{results['roi_percent']:.1f}%")
+                st.write(("Expected churn without campaign" if is_en else "Churn attendu sans campagne") + f": **{results['expected_churn_without_campaign']:.1f}**")
+                st.write(("Expected churn prevented (assumption-based)" if is_en else "Churn évité attendu (hypothèse)") + f": **{results['expected_churn_prevented']:.1f}**")
+                st.caption("Revenue saved = sum(churn probability × monthly charges × selected months × assumed effectiveness). ROI and net benefit are hypothetical and depend entirely on the assumptions entered." if is_en else "Revenu préservé = somme(probabilité de churn × frais mensuels × mois × efficacité supposée). Le ROI et le bénéfice net sont hypothétiques et dépendent des paramètres saisis.")
+                st.subheader("Selected customers" if is_en else "Clients sélectionnés")
+                cols = [c for c in ["customerID", "Contract", "tenure", "MonthlyCharges", "churn_probability", "risk_level"] if c in target_df.columns]
+                st.dataframe(target_df[cols].sort_values("churn_probability", ascending=False), use_container_width=True, hide_index=True)
+    else:
+        st.info("First score customers in Portfolio Analysis, then return here. The scored portfolio is kept in session while this app session remains active." if is_en else "Commencez par analyser les clients dans Analyse du portefeuille, puis revenez ici. Les prédictions restent en session tant que celle-ci est active.")
 
 elif page == t["performance"]:
 
