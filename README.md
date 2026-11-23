@@ -1,189 +1,210 @@
-## Live Demo
+# Telco Customer Churn Prediction & Retention Analytics
 
-🚀 [Try the Telco Customer Churn Prediction App](https://telco-customer-churn-mmehdi2.streamlit.app/)
+A machine-learning application that predicts customer churn, explains individual predictions, and helps explore retention strategies through customer portfolio analysis and a campaign simulator.
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://telco-customer-churn-mmehdi2.streamlit.app/)
 
-# Telco Customer Churn Prediction
+## Live application and repository
 
-An end-to-end Machine Learning project that predicts customer churn using the IBM Telco Customer Churn dataset. The project combines exploratory data analysis, feature engineering, model evaluation, and an interactive Streamlit application.
+- **Live app:** https://telco-customer-churn-mmehdi2.streamlit.app/
+- **GitHub repository:** https://github.com/mmehdi30/telco-customer-churn
 
-## Project Overview
+## Business problem
 
-Customer churn is a major challenge for telecommunications companies. Identifying customers who are likely to leave can help businesses develop targeted retention strategies.
+Customer churn directly affects recurring revenue. The goal of this project is to use customer data to identify customers who may be at risk of leaving, understand the factors contributing to their predicted risk, and support retention planning with actionable analysis.
 
-This project builds a classification model to estimate the probability that a customer will discontinue their service.
-
-**Main objectives:**
-- Explore customer behavior and identify patterns associated with churn.
-- Perform data preprocessing and feature engineering.
-- Train and compare machine learning models.
-- Evaluate model performance using appropriate classification metrics.
-- Deploy an interactive application for customer churn prediction.
+The app is designed to support analysis—not to replace business judgment or prove that a particular retention offer will prevent churn.
 
 ## Dataset
 
-The project uses the IBM Telco Customer Churn dataset.
+The project uses the IBM Telco Customer Churn dataset, containing **7,043 customer records**. The target variable is `Churn`.
 
-- **Number of records:** 7,043 customers.
-- **Target variable:** `Churn` (Yes / No).
-- **Features:** Customer demographics, subscribed services, contract information, and billing details.
+The dataset includes customer demographics, account tenure, services, contract details, billing, and payment information.
 
-The original dataset contains 26.54% churned customers and 73.46% retained customers.
+## Machine-learning workflow
 
-## Project Structure
+1. Data inspection and cleaning
+2. Exploratory data analysis
+3. Feature engineering, including `NumAdditionalServices`
+4. Encoding and preprocessing for model inputs
+5. Logistic Regression model training
+6. Out-of-fold prediction-based threshold selection to optimize the F1 score
+7. Evaluation on a held-out test set
+8. Model explainability with SHAP
 
-```text
-telco-customer-churn/
-│
-├── app.py
-├── predict.py
-├── translations.py
-├── requirements.txt
-├── README.md
-│
-├── models/
-│   ├── telco_churn_model.pkl
-│   ├── model_features.json
-│   └── model_config.json
-│
-└── notebooks/
-    └── telco_churn_analysis.ipynb
-```
+## Model performance
 
-## Methodology
+The final test-set metrics recorded for this model are:
 
-### 1. Exploratory Data Analysis
 
-The notebook investigates:
-- Churn distribution.
-- Customer tenure and churn behavior.
-- Contract types and payment methods.
-- Internet services and additional subscriptions.
-- Relationships between numerical and categorical features.
-
-Some important observations:
-- Month-to-month contracts are associated with substantially higher churn.
-- Customers with shorter tenure are more likely to churn.
-- Electronic check users exhibit higher churn rates.
-- Online Security and Tech Support subscriptions are associated with lower churn rates.
-
-These are descriptive associations, not causal conclusions.
-
-### 2. Data Preprocessing and Feature Engineering
-
-The preprocessing workflow includes:
-- Handling missing and inconsistent values.
-- Converting numerical columns to appropriate data types.
-- Separating numerical and categorical features.
-- Scaling numerical variables using `StandardScaler`.
-- Encoding categorical variables using `OneHotEncoder`.
-- Creating additional customer service features.
-- Removing redundant features following feature selection experiments.
-
-The final model uses 19 selected input features.
-
-### 3. Model Training and Selection
-
-Two classification approaches were compared:
-
-- Logistic Regression
-- Random Forest
-
-The final model is Logistic Regression.
-
-It was selected because it achieved performance comparable to the tuned Random Forest while offering a simpler and more interpretable model.
-
-### 4. Model Evaluation
-
-The final model was evaluated on a held-out test set.
-
-| Metric | Result |
+| Metric | Score |
 |---|---:|
-| ROC-AUC | 83.90% |
-| Accuracy | 75.94% |
-| Precision (Churn = Yes) | 53.51% |
-| Recall (Churn = Yes) | 71.39% |
-| F1-score (Churn = Yes) | 61.17% |
+| ROC-AUC | 0.839 |
+| Accuracy | 0.7594 |
+| Precision (Churn) | 0.5351 |
+| Recall (Churn) | 0.7139 |
+| F1-score (Churn) | 0.6117 |
 
-A classification threshold of **0.325** was selected to improve churn detection, prioritizing recall over precision.
 
-The test set was also consulted during earlier model exploration and feature-importance analysis, so the final test results should be interpreted with this limitation in mind.
+The selected classification threshold prioritizes a balance between precision and recall, with particular attention to detecting customers who churn.
 
-## Interactive Application
+## Application features
 
-The project includes a Streamlit application that allows users to:
+### 1. Individual churn prediction
 
-- Enter customer information.
-- Load example customer profiles.
-- Estimate churn probability.
-- View the predicted churn category.
-- Explore descriptive churn indicators.
-- Switch between English and French.
+Enter customer details to obtain a churn probability and risk assessment.
 
-## Installation and Usage
+### 2. Explainable predictions
 
-Clone the repository:
+SHAP is used to explain model output and highlight the features that push an individual prediction toward or away from churn. Explanations are intended to improve transparency, not to establish causality.
 
-```bash
-git clone https://github.com/mmehdi30/telco-customer-churn.git
-cd telco-customer-churn
-```
+### 3. Retention recommendations
 
-Create and activate a virtual environment:
+The application provides rule-based retention suggestions. Recommendations are prioritized using model explanation signals and business rules; they are heuristics, not causal or experimentally validated treatment recommendations.
 
-```bash
-python -m venv .venv
-```
+### 4. Customer portfolio analysis
 
-On Windows:
+Upload a CSV containing customer records to score a customer portfolio in bulk. The churn label is optional: the workflow can score customers even when historical churn outcomes are not provided. The portfolio view includes risk distribution, customer ranking, risk filters, and exportable results.
 
-```bash
-.venv\Scripts\activate
-```
+### 5. Retention campaign simulator
 
-Install dependencies:
+Explore hypothetical retention campaign scenarios by adjusting targeting, campaign cost, assumed effectiveness, revenue horizon, and campaign type. The simulator is an estimation tool based on assumptions; it does not represent measured campaign results or guarantee savings.
 
-```bash
-pip install -r requirements.txt
-```
+## Screenshots
 
-Launch the application:
+### Customer portfolio overview
 
-```bash
-streamlit run app.py
-```
+Portfolio KPIs and bulk scoring overview.
 
-## Technologies Used
+![Customer portfolio overview](docs/images/customer-portfolio-overview.png)
+
+### Risk distribution
+
+Overview of customers grouped by predicted risk level.
+
+![Risk distribution](docs/images/risk-distribution.png)
+
+### Customer ranking
+
+Filter and inspect customers ranked by churn probability and estimated monthly revenue at risk.
+
+![Customer ranking](docs/images/customer-ranking.png)
+
+### SHAP explanation
+
+An example explanation showing feature contributions for an individual prediction.
+
+![SHAP explanation](docs/images/shap-explanation.png)
+
+### Campaign targeting
+
+Adjust the hypothetical campaign assumptions and targeting strategy.
+
+![Campaign targeting](docs/images/campaign-targeting.png)
+
+### Selected customers
+
+Review the customers selected by the campaign scenario.
+
+![Campaign selected customers](docs/images/campaign-selected-customers.png)
+
+## Tech stack
 
 - Python
 - Pandas and NumPy
 - Scikit-learn
-- Matplotlib and Seaborn
-- Joblib
+- SHAP
 - Streamlit
-- Jupyter Notebook
-- Git and GitHub
+- Matplotlib
+- Joblib
+
+## Project structure
+
+```text
+.
+├── app.py
+├── predict.py
+├── explain.py
+├── retention.py
+├── portfolio.py
+├── campaign_simulator.py
+├── translations.py
+├── models/
+│   ├── telco_churn_model.pkl
+│   ├── model_features.json
+│   ├── model_config.json
+│   └── shap_background.csv
+├── notebooks/
+│   └── notebook.ipynb
+├── docs/
+│   └── images/
+├── requirements.txt
+└── README.md
+```
+
+## Run locally
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/mmehdi30/telco-customer-churn.git
+   cd telco-customer-churn
+   ```
+
+2. Create and activate a virtual environment:
+
+   ```bash
+   python -m venv .venv
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+   macOS/Linux:
+
+   ```bash
+   source .venv/bin/activate
+   ```
+
+3. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Launch the application:
+
+   ```bash
+   streamlit run app.py
+   ```
 
 ## Limitations
 
-- Predictions are estimates based on historical data, not guarantees of future behavior.
-- Model performance depends on the quality and representativeness of the training dataset.
-- The classification threshold reflects a particular trade-off between precision and recall.
-- The model has not yet been validated on a separate, newly collected customer population.
+- The model is trained on a historical dataset and may not generalize to every business or customer population.
+- Predicted churn probability is a model estimate, not a certainty.
+- SHAP describes how features contribute to the model output; it does not establish causal relationships.
+- Retention recommendations are rule-based heuristics and are not validated through experiments.
+- Campaign simulator outputs depend on user-defined assumptions and should be interpreted as hypothetical estimates.
 
-## Future Improvements
+## Future improvements
 
-- Add SHAP for individual prediction explanations.
-- Develop a REST API using FastAPI.
-- Containerize the application using Docker.
-- Introduce experiment tracking with MLflow.
-- Implement automated testing and model monitoring.
+- Evaluate model calibration and monitor performance over time.
+- Test alternative models and compare them using business-relevant metrics.
+- Validate retention actions through controlled experiments or A/B tests.
+- Incorporate real campaign outcomes and cost data into the simulator.
 
-## Author
+## What I learned
 
-**Mehdi Merzouki**
+- Building an end-to-end churn prediction workflow, from data preparation to deployment.
+- Evaluating classification models with metrics beyond accuracy, especially recall and F1 for churn detection.
+- Applying feature engineering and threshold optimization.
+- Using SHAP to interpret model predictions.
+- Turning model output into a practical analytics workflow through bulk scoring, customer ranking, and scenario simulation.
+- Deploying a machine-learning application with Streamlit.
 
-Machine Learning and Data Science
 
-[GitHub Repository](https://github.com/mmehdi30/telco-customer-churn)
+---
+
+**Author:** Mehdi Merzouki
